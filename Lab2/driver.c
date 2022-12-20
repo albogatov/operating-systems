@@ -82,14 +82,10 @@ static ssize_t driver_read(struct file *filp, char __user *buf, size_t length, l
         		pr_info("nothing to transmit%s", lsmod_ptr);
 				return 0;
         	}
-		    
 		  while (length && *lsmod_ptr)  {
-		
 		    put_user(*(lsmod_ptr++), buf++);
 		    length--;
-
 		  }
-		  
         return 0;
 }
 /*
@@ -112,88 +108,27 @@ static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
          	}
          	break;
 		case IOCTL_GET_MSG:
-			driver_read(file, (char*) arg, strlen(lsmod), 0);
-			break;
-                case RD_LSMOD:
-			char* ptr;
-			struct file *f1;
-			struct file *f2;
-			char* file_name = kmalloc(32, GFP_KERNEL);
-			char buff1[32];
 			int i;
-			for (i = 0; i < 32; i++)
-				buff1[i] = 0;
-			char buff2[32];
-			for (i = 0; i < 32; i++)
-				buff2[i] = 0;
-                	struct user_lsmod begin = (struct user_lsmod) {
-                		.module_names = THIS_MODULE->name,
-				.module_ = THIS_MODULE,
-                		.next = NULL
-                	};
-                	struct user_lsmod begin2 = (struct user_lsmod) {
-                		.module_names = "",
-                		.next = NULL
-                	};
-                	struct user_lsmod* user_modules = &begin;
-                	struct user_lsmod* next_mod = &begin2;
                 	struct list_head* list;
+                	struct list_head* list_inner;
                 	struct module* mod;
+                	struct module_use* mod_inner;
                 	struct module* this_mod = THIS_MODULE;
 			pr_info("%-18s %-10s %-3s", "Module", "Size", "Used by");
 			lsmod_ptr_current += sprintf(lsmod_ptr_current, "%-18s %-10s %-3s\n", "Module", "Size", "Used by");
-                	list_for_each(list, &this_mod->list) {
-                	    if(list_entry(list, struct module, list) != NULL)
-                	    mod = list_entry(list, struct module, list);
-                	    next_mod->module_names = mod->name;
-                	    if (strcmp(mod->name, "") != 0) {
-				user_modules->next = next_mod;
-		        	    strcpy(file_name, "/sys/module/");
-		        	    strcat(file_name, mod->name);
-		        	    strcat(file_name, "/coresize");
-				    f1 = filp_open(file_name, O_RDONLY, 0);
-				    if (f1 == NULL)
-				    	pr_err("Failed to open file");
-				    else {
-				    
-				    	kernel_read(f1, buff1, 16, &f1->f_pos);
-				    
-				    	filp_close(f1, NULL);
-				    	for (ptr = buff1 + strlen(buff1) - 1; (ptr >= buff1) && isspace(*ptr); --ptr);
-    					ptr[1] = '\0';
+			lsmod_ptr_current += sprintf(lsmod_ptr_current, "%-18s %-10d %-3u\n", this_mod->name, this_mod->core_layout.size, this_mod->refcnt);   
+                	list_for_each(list, &(THIS_MODULE->list)) {
+                		    mod = list_entry(list, struct module, list);
+		        	    if (strcmp(mod->name, "") != 0) {
+					    lsmod_ptr_current += sprintf(lsmod_ptr_current, "%-18s %-10d %-3ld", mod->name, mod->core_layout.size, module_refcount(mod));   
+					    list_for_each_entry(mod_inner, &(mod->source_list), source_list) {
+		        			lsmod_ptr_current += sprintf(lsmod_ptr_current, "%s, ", mod_inner->source->name);  
+					    }
+					    lsmod_ptr_current += sprintf(lsmod_ptr_current, "\n");   
 				    }
-	
-				    strcpy(file_name, "/sys/module/");
-		        	    strcat(file_name, mod->name);
-		        	    strcat(file_name, "/refcnt");
-				    f2 = filp_open(file_name, O_RDONLY, 0);
-				    if (f2 == NULL)
-				    	pr_err("Failed to open file");
-				    else {
-				    
-				    	kernel_read(f2, buff2, 16, &f2->f_pos);
-		
-				    	filp_close(f2, NULL);
-				    	for (ptr = buff2 + strlen(buff2) - 1; (ptr >= buff2) && isspace(*ptr); --ptr);
-    					ptr[1] = '\0';
-				    }
-				   
-				    pr_info("%-18s %-10s %-3s", mod->name, buff1, buff2);
-				    lsmod_ptr_current += sprintf(lsmod_ptr_current, "%-18s %-10s %-3s\n", mod->name, buff1, buff2);
-		        	    next_mod->next = NULL;
-				    next_mod->module_ = mod;
-				    user_modules = next_mod;
-			    }
                 	}
                 	pr_info("Here we are!\n");
-                	pr_info("We recorded first module %s\n", begin.module_names);
-
-                	begin.lsmod_len = strlen(lsmod);
-                	 if(copy_to_user((struct user_lsmod*) arg, &begin, sizeof(begin)))
-				        {
-				                pr_err("Data Write1 : Err!\n");
-				        }
-
+                	driver_read(file, (char*) arg, BUFFER, 0);
                         break;
                 case RD_FPU_STATE:
                 	pr_info("Well it's started");
@@ -215,7 +150,6 @@ static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         			.ip_selector = fpu_state_kernel->regs.xsave.i387.fcs,
         			.operand_offset = fpu_state_kernel->regs.xsave.i387.foo,
         			.operand_selector = fpu_state_kernel->regs.xsave.i387.fos,
-        			.fpu_state_ = fpu_state_kernel
         		};
         		pr_info("Copy init");
                         if(copy_to_user((struct user_fpu_state *) arg, &user_fpstate, sizeof(user_fpstate)) )
@@ -259,7 +193,6 @@ static int __init driver_driver_init(void)
             goto r_device;
         }
         pr_info("Device Driver Insert...Done!!!\n");
-        int i;
         lsmod_ptr = lsmod;
         lsmod_ptr_current = lsmod;
         return 0;
