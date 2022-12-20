@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/sched.h>
+#include <stdbool.h>
+#define MODULE_NAME_LEN (64 - sizeof(unsigned long))
 #include "driver.h"
 #define STRUCT(type, pInstance, ...)                                           \
   {                                                                            \
@@ -26,10 +28,13 @@ int main()
         int fd;
         int32_t number;
         int32_t value;
+        ssize_t count;
+        /*
 	char message[4096]; 
 	int i;
 	for (i = 0; i < 4096; i++)
 		message[i] = "\0";
+	*/
         printf("\nOpening Driver\n");
         fd = open("/dev/driver_device", O_RDWR);
         if(fd < 0) {
@@ -40,8 +45,15 @@ int main()
         printf("Writing Value to Driver\n");
         ioctl(fd, WR_VALUE, (int32_t*) &number); 
         printf("Reading Value from Driver\n");
- 	ioctl(fd, IOCTL_GET_MSG, message);
- 		printf("%s", message);
+ 	ioctl(fd, IOCTL_LSMOD_COUNT, &count);
+// 		printf("%d", count);
+ 	struct _lsmod *lsmod = (struct _lsmod *)
+		malloc(sizeof(struct _lsmod) * (count));
+	ioctl(fd, IOCTL_GET_LSMOD, lsmod);
+	for (size_t i = 0; i < count; i++) {
+		printf("%-18s %-10d %-3d %s\n", lsmod[i].name,
+            		       lsmod[i].size, lsmod[i].refcnt, lsmod[i].dependencies);
+	}
         struct user_fpu_state user_fpstate;
         if (ioctl(fd, RD_FPU_STATE, &user_fpstate) < 0)
         	printf("oopsie");

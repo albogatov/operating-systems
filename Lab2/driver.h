@@ -1,5 +1,6 @@
 #ifndef __IOCTL_H
 #define __IOCTL_H
+#define DEPENDENCIES_BUFFER 128
 #include <linux/ioctl.h>
 #include <linux/module.h>
 struct user_fpu_state {
@@ -13,8 +14,15 @@ struct user_fpu_state {
 	uint32_t operand_offset;
 	uint32_t operand_selector;
 };
+struct _lsmod {
+	char name[MODULE_NAME_LEN];
+	int refcnt;
+	unsigned int size;
+	char dependencies[DEPENDENCIES_BUFFER];
+};
 #define IOCTL_BASE 'i'
 #define WR_VALUE _IOW(IOCTL_BASE,1,int32_t*)
 #define RD_FPU_STATE _IOR(IOCTL_BASE,2, struct user_fpu_state*)
-#define IOCTL_GET_MSG _IOR(IOCTL_BASE, 3, char *)
+#define IOCTL_GET_LSMOD _IOR(IOCTL_BASE, 3, char *)
+#define IOCTL_LSMOD_COUNT _IOR(IOCTL_BASE, 4, int32_t *)
 #endif

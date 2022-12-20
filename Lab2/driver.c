@@ -21,11 +21,16 @@
 #include <linux/pid_namespace.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
+#include <linux/module.h>
 #include "driver.h"
+/*
 #define BUFFER  4096
 static char lsmod[BUFFER];
 static char* lsmod_ptr;
 static char* lsmod_ptr_current;
+*/
+static char dependency_buffer[DEPENDENCIES_BUFFER];
+static char* dependency_buffer_ptr = dependency_buffer;
 struct task_struct* task;
 struct thread_struct* threadp;
 struct pid* pid;
@@ -77,6 +82,7 @@ static int driver_release(struct inode *inode, struct file *file)
 */
 static ssize_t driver_read(struct file *filp, char __user *buf, size_t length, loff_t *off)
 {
+/*
         pr_info("Read Function\n");
         	if (*lsmod_ptr == 0) {
         		pr_info("nothing to transmit%s", lsmod_ptr);
@@ -86,6 +92,7 @@ static ssize_t driver_read(struct file *filp, char __user *buf, size_t length, l
 		    put_user(*(lsmod_ptr++), buf++);
 		    length--;
 		  }
+	*/	  
         return 0;
 }
 /*
@@ -107,8 +114,102 @@ static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
          		pr_err("Data Write: Err\n");
          	}
          	break;
-		case IOCTL_GET_MSG:
-			int i;
+         	case IOCTL_LSMOD_COUNT:
+         		int count = 1;
+         		struct list_head* c_list;
+                	//struct list_head* list_inner;
+                	struct module* c_mod;
+                	//struct module_use* mod_inner;
+                	//struct module* this_mod = THIS_MODULE;  
+                	list_for_each(c_list, &(THIS_MODULE->list)) {
+                		    c_mod = list_entry(c_list, struct module, list);
+		        	    if (strcmp(c_mod->name, "") != 0) {
+					   count++; 
+				    }
+                	}
+                	pr_info("Here we are!\n");
+                	if( copy_to_user((int32_t*) arg, &count, sizeof(count)) )
+                        {
+                                pr_err("Data Read : Err!\n");
+                        }           
+                        pr_info("Copy finished");
+         		break;
+         	case IOCTL_GET_LSMOD:
+         		int refcnt;
+         		int i;
+         		int dep_count = 0;
+         		struct _lsmod *lsmod_output = arg;
+         		//struct dependency lsmod_depends_on = arg;
+         		struct list_head* list;
+                	struct list_head* list_inner;
+                	struct module* mod;
+                	struct module_use* mod_inner;
+                	struct module* this_mod = THIS_MODULE;  
+                	list_for_each(list, &(THIS_MODULE->list)) {
+                		    mod = list_entry(list, struct module, list);
+		        	    if (strcmp(mod->name, "") == 0) 
+		        	    	mod = THIS_MODULE;
+		        	    refcnt = module_refcount(mod);
+		        	    	list_for_each_entry(mod_inner, &(mod->source_list), source_list) {
+		        			strcat(dependency_buffer_ptr, mod_inner->source->name);
+		        			strcat(dependency_buffer_ptr, " ");
+					    }
+					   if( copy_to_user(&lsmod_output->refcnt, &refcnt, sizeof(refcnt)) )
+						{
+						        pr_err("Data Read refcnt : Err!\n");
+						}  
+					 if( copy_to_user(lsmod_output->name, &mod->name, sizeof(mod->name)) )
+						{
+						        pr_err("Data Read name : Err!\n");
+						}  
+					if( copy_to_user(&lsmod_output->size, &mod->core_layout.size, sizeof(mod->core_layout.size)) )
+						{
+						        pr_err("Data Read size : Err!\n");
+						} 
+					if( copy_to_user(lsmod_output->dependencies, &dependency_buffer, sizeof(dependency_buffer)) )
+						{
+						        pr_err("Data Read refcnt : Err!\n");
+						}  
+						lsmod_output++;
+						//pr_info("AAA%s", dependency_buffer);
+						strcpy(dependency_buffer, "");
+					//	for (i = 0 ; i < DEPENDENCIES_BUFFER; i++)
+					//		dependency_buffer[i] = "\0";
+						dependency_buffer_ptr = dependency_buffer;
+                	}
+                	pr_info("Here we are!\n");
+         		break;
+         	/*
+         	case IOCTL_LSMOD_COUNT:
+         		int count = 1;
+         		struct list_head* list;
+                	struct list_head* list_inner;
+                	struct module* mod;
+                	struct module_use* mod_inner;
+                	struct module* this_mod = THIS_MODULE;
+			pr_info("%-18s %-10s %-3s", "Module", "Size", "Used by");
+			lsmod_ptr_current += sprintf(lsmod_ptr_current, "%-18s %-10s %-3s\n", "Module", "Size", "Used by");
+			lsmod_ptr_current += sprintf(lsmod_ptr_current, "%-18s %-10d %-3u\n", this_mod->name, this_mod->core_layout.size, this_mod->refcnt);   
+                	list_for_each(list, &(THIS_MODULE->list)) {
+                		    mod = list_entry(list, struct module, list);
+		        	    if (strcmp(mod->name, "") != 0) {
+					    lsmod_ptr_current += sprintf(lsmod_ptr_current, "%-18s %-10d %-3ld", mod->name, mod->core_layout.size, module_refcount(mod));   
+					    list_for_each_entry(mod_inner, &(mod->source_list), source_list) {
+		        			lsmod_ptr_current += sprintf(lsmod_ptr_current, "%s, ", mod_inner->source->name);  
+					    }
+					    lsmod_ptr_current += sprintf(lsmod_ptr_current, "\n");   
+				    }
+                	}
+                	count = strlen(lsmod);
+                	pr_info("Here we are!\n");
+                	if( copy_to_user((int32_t*) arg, &count, sizeof(count)) )
+                        {
+                                pr_err("Data Read : Err!\n");
+                        }           
+                        pr_info("Copy finished");
+         	break;
+         	/*
+		case IOCTL_GET_LSMOD:
                 	struct list_head* list;
                 	struct list_head* list_inner;
                 	struct module* mod;
@@ -128,8 +229,9 @@ static long driver_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				    }
                 	}
                 	pr_info("Here we are!\n");
-                	driver_read(file, (char*) arg, BUFFER, 0);
+                	//driver_read(file, (char*) arg, BUFFER, 0);
                         break;
+                        */
                 case RD_FPU_STATE:
                 	pr_info("Well it's started");
                 	threadp = kmalloc(sizeof(struct thread_struct), GFP_KERNEL);
@@ -193,8 +295,7 @@ static int __init driver_driver_init(void)
             goto r_device;
         }
         pr_info("Device Driver Insert...Done!!!\n");
-        lsmod_ptr = lsmod;
-        lsmod_ptr_current = lsmod;
+        dependency_buffer_ptr = dependency_buffer;
         return 0;
 r_device:
         class_destroy(dev_class);
